@@ -95,7 +95,7 @@ async function matchRegularItem(
 
 /**
  * Maps library items to papers_index.json entries.
- * Order of precedence: linked/stored absolute path > file name > title.
+ * Order of precedence: linked/stored absolute path > file name > title > short title.
  * Unmatched items render empty cells.
  * New maps are built locally and swapped in at the end, so concurrent
  * lookups never observe a half-rebuilt (empty) mapping.
@@ -128,6 +128,14 @@ export async function rebuildMatchMap(): Promise<string> {
     }
     if (paper.title) {
       byTitle.set(normTitle(paper.title), paper.id);
+    }
+    // Short titles bridge items whose stored PDF copy was renamed and whose
+    // item title was shortened (e.g. item "Dream-RSI" vs full paper title).
+    if (paper.short) {
+      const key = normTitle(String(paper.short));
+      if (key && !byTitle.has(key)) {
+        byTitle.set(key, paper.id);
+      }
     }
     if (paper.file) {
       byFile.set(String(paper.file).toLowerCase(), paper.id);

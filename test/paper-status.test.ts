@@ -2,6 +2,7 @@ import { assert } from "chai";
 import { config } from "../package.json";
 import { splitCellData } from "../src/modules/columns";
 import { store } from "../src/modules/indexStore";
+import { normTitle } from "../src/modules/matcher";
 
 const PREF_JSON_PATH = "extensions.zotero.paperstatus.jsonPath";
 const ADDON_ID = config.addonID;
@@ -91,9 +92,11 @@ describe("paper status plugin", function () {
   let jsonDir: string;
   let initialDoc: any;
   let paper: any;
+  let shortPaper: any;
   let titleItem: any;
   let fileItem: any;
   let linkedItem: any;
+  let shortItem: any;
   let strangerItem: any;
 
   async function readRaw(): Promise<string> {
@@ -160,11 +163,23 @@ describe("paper status plugin", function () {
     strangerItem.setField("title", `zz-unmatched-${Date.now()}`);
     await strangerItem.saveTx();
 
+    shortPaper =
+      initialDoc.papers.find(
+        (candidate: any) =>
+          candidate &&
+          candidate.short &&
+          normTitle(candidate.short) !== normTitle(candidate.title || ""),
+      ) ?? paper;
+    shortItem = new Zotero.Item("document");
+    shortItem.setField("title", String(shortPaper.short || shortPaper.title));
+    await shortItem.saveTx();
+
     await waitFor(
       () =>
         (cellDataFor(titleItem, "reading") &&
           cellDataFor(fileItem, "reading") &&
-          cellDataFor(linkedItem, "reading")) ||
+          cellDataFor(linkedItem, "reading") &&
+          cellDataFor(shortItem, "reading")) ||
         undefined,
       "match map rebuild for all seeded items",
       30000,
@@ -192,16 +207,16 @@ describe("paper status plugin", function () {
   });
 
   it("maps library items to papers and leaves unmatched rows empty", function () {
-    const expectedReading = String(paper.reading ?? "未读");
-    for (const [item, what] of [
-      [titleItem, "title match"],
-      [fileItem, "filename match"],
-      [linkedItem, "absolute path match"],
-    ] as Array<[any, string]>) {
+    for (const [item, what, target] of [
+      [titleItem, "title match", paper],
+      [fileItem, "filename match", paper],
+      [linkedItem, "absolute path match", paper],
+      [shortItem, "short title match", shortPaper],
+    ] as Array<[any, string, any]>) {
       const parsed = splitCellData(cellDataFor(item, "reading"));
       assert.isOk(parsed, `${what} should carry a paper id`);
-      assert.equal(parsed!.paperId, paper.id);
-      assert.equal(parsed!.display, expectedReading);
+      assert.equal(parsed!.paperId, target.id);
+      assert.equal(parsed!.display, String(target.reading ?? "未读"));
     }
     const starParsed = splitCellData(cellDataFor(titleItem, "star"));
     assert.equal(starParsed!.display, paper.star === true ? "★" : "☆");
