@@ -7,11 +7,6 @@ export default defineConfig({
   name: pkg.config.addonName,
   id: pkg.config.addonID,
   namespace: pkg.config.addonRef,
-  updateURL: `https://github.com/{{owner}}/{{repo}}/releases/download/release/${
-    pkg.version.includes("-") ? "update-beta.json" : "update.json"
-  }`,
-  xpiDownloadLink:
-    "https://github.com/{{owner}}/{{repo}}/releases/download/v{{version}}/{{xpiName}}.xpi",
 
   build: {
     assets: ["addon/**/*.*"],
@@ -19,7 +14,6 @@ export default defineConfig({
       ...pkg.config,
       author: pkg.author,
       description: pkg.description,
-      homepage: pkg.homepage,
       buildVersion: pkg.version,
       buildTime: "{{buildTime}}",
     },
@@ -39,8 +33,24 @@ export default defineConfig({
     ],
   },
 
+  server: {
+    // Dev instance uses an isolated profile/data dir and must never write the
+    // real papers_index.json; point it at the working copy instead.
+    prefs: {
+      "extensions.zotero.paperstatus.jsonPath":
+        "C:\\Users\\35150\\Desktop\\学习资料\\paper\\papers_index.COPY.json",
+    },
+  },
+
   test: {
     waitForPlugin: `() => Zotero.${pkg.config.addonInstance}.data.initialized`,
+    mocha: {
+      timeout: 20000,
+    },
+    prefs: {
+      "extensions.zotero.paperstatus.jsonPath":
+        "C:\\Users\\35150\\Desktop\\学习资料\\paper\\papers_index.COPY.json",
+    },
   },
 
   // If you need to see a more detailed log, uncomment the following line:
