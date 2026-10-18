@@ -55,7 +55,15 @@ async function waitFor<T>(
       return value;
     }
     if (Date.now() - start > timeout) {
-      throw new Error(`timed out waiting for ${what}`);
+      const error = new Error(`timed out waiting for ${what}`);
+      // The scaffold reporter serializes errors with JSON.stringify(), which
+      // drops the usual non-enumerable Error#message; make it enumerable so CI
+      // logs show what actually timed out.
+      Object.defineProperty(error, "message", {
+        value: error.message,
+        enumerable: true,
+      });
+      throw error;
     }
     await sleep(interval);
   }
@@ -172,6 +180,16 @@ describe("paper status plugin", function () {
     };
     await IOUtils.writeUTF8(prefPath, `${JSON.stringify(fixture, null, 2)}\n`);
     assert.isTrue(await store.load(), "fixture index should load");
+
+    // The plugin has its own copy of the store, loaded at startup from what
+    // was then a nonexistent fixture path. Restart it so it reloads from the
+    // fixture we just wrote instead of depending on focused-window polling,
+    // which is flaky on headless CI.
+    const instance = Zotero[config.addonInstance] as any;
+    assert.isOk(instance, "plugin instance is available");
+    instance.hooks.onShutdown();
+    await instance.hooks.onStartup();
+    Zotero[config.addonInstance] = instance;
 
     initialDoc = JSON.parse(await readRaw());
 
