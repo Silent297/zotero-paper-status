@@ -150,7 +150,7 @@ export async function rebuildMatchMap(): Promise<string> {
     }
   }
 
-  let items: Zotero.Item[] = [];
+  let items: Zotero.Item[];
   try {
     items = await Zotero.Items.getAll(
       Zotero.Libraries.userLibraryID,
