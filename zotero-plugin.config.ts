@@ -1,3 +1,5 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { defineConfig } from "zotero-plugin-scaffold";
 import pkg from "./package.json";
 
@@ -48,8 +50,13 @@ export default defineConfig({
       timeout: 20000,
     },
     prefs: {
-      "extensions.zotero.paperstatus.jsonPath":
-        "C:\\Users\\35150\\Desktop\\学习资料\\paper\\papers_index.COPY.json",
+      // Cross-platform placeholder: the test suite creates and points at its
+      // own per-run fixture directory (see test/paper-status.test.ts).
+      "extensions.zotero.paperstatus.jsonPath": join(
+        tmpdir(),
+        "zotero-paperstatus-test",
+        "papers_index.COPY.json",
+      ),
     },
   },
 

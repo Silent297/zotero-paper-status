@@ -121,13 +121,58 @@ describe("paper status plugin", function () {
   }
 
   before(async function () {
-    prefPath = Zotero.Prefs.get(PREF_JSON_PATH, true) as string;
+    // Self-contained fixture: the suite must never depend on the user's real
+    // papers_index.json or on files outside the test (CI runs on a clean
+    // Linux runner without any local data).
+    jsonDir = PathUtils.join(
+      PathUtils.tempDir,
+      `zotero-paperstatus-test-${Date.now()}`,
+    );
+    await IOUtils.makeDirectory(jsonDir, { ignoreExisting: true });
+    prefPath = PathUtils.join(jsonDir, "papers_index.COPY.json");
+    Zotero.Prefs.set(PREF_JSON_PATH, prefPath, true);
     assert.include(
       prefPath,
       "papers_index.COPY.json",
-      "tests must target the COPY file, never the real papers_index.json",
+      "tests must target a COPY file, never the real papers_index.json",
     );
-    jsonDir = PathUtils.parent(prefPath) as string;
+
+    const pdfDir = PathUtils.join(jsonDir, "files");
+    await IOUtils.makeDirectory(pdfDir, { ignoreExisting: true });
+    await IOUtils.writeUTF8(
+      PathUtils.join(pdfDir, "paper-one.pdf"),
+      "%PDF-1.4\n% paper status test fixture\n%%EOF\n",
+    );
+    const fixture = {
+      version: 1,
+      updated: "2026-01-01 00:00",
+      papers: [
+        {
+          id: "fixture/paper-one.pdf",
+          title: "Fixture Paper One for Status Tests",
+          file: "paper-one.pdf",
+          path: "files/paper-one.pdf",
+          reading: "未读",
+          intent: "",
+          share: "未安排",
+          star: false,
+        },
+        {
+          id: "fixture/short-only.pdf",
+          title: "Completely Different Full Title That Items Do Not Carry",
+          short: "FixtureShort",
+          file: "short-only.pdf",
+          path: "files/short-only-missing.pdf",
+          reading: "在读",
+          intent: "速读",
+          share: "已预订",
+          star: true,
+        },
+      ],
+    };
+    await IOUtils.writeUTF8(prefPath, `${JSON.stringify(fixture, null, 2)}\n`);
+    assert.isTrue(await store.load(), "fixture index should load");
+
     initialDoc = JSON.parse(await readRaw());
 
     let absPdf = "";
@@ -135,7 +180,8 @@ describe("paper status plugin", function () {
       if (!candidate || !candidate.path || !candidate.file) {
         continue;
       }
-      const absolute = `${jsonDir}\\${String(candidate.path).replace(/\//g, "\\")}`;
+      const segments = String(candidate.path).split(/[\\/]+/);
+      const absolute = PathUtils.join(jsonDir, ...segments);
       if (await IOUtils.exists(absolute)) {
         paper = candidate;
         absPdf = absolute;
@@ -257,7 +303,9 @@ describe("paper status plugin", function () {
       const raw = await waitFor(async () => {
         const text = await readRaw();
         const parsed = JSON.parse(text);
-        return paperById(parsed, paper.id).reading === expected ? text : undefined;
+        return paperById(parsed, paper.id).reading === expected
+          ? text
+          : undefined;
       }, `reading to become ${expected}`);
       if (click === 1) {
         firstWrite = raw;
@@ -283,7 +331,8 @@ describe("paper status plugin", function () {
     for (const i of diffs) {
       const line = afterLines[i];
       assert.isTrue(
-        line.includes(`"reading":`) || line.trimStart().startsWith(`"updated":`),
+        line.includes(`"reading":`) ||
+          line.trimStart().startsWith(`"updated":`),
         `only reading/updated may change, got: ${line} (was: ${beforeLines[i]})`,
       );
     }
@@ -365,7 +414,10 @@ describe("paper status plugin", function () {
     const shownReading = store.getDisplay(paper.id, "reading");
     assert.isOk(shownReading);
 
-    const missingPath = `${jsonDir}\\definitely-not-a-file-${Date.now()}.json`;
+    const missingPath = PathUtils.join(
+      jsonDir,
+      `definitely-not-a-file-${Date.now()}.json`,
+    );
     Zotero.Prefs.set(PREF_JSON_PATH, missingPath, true);
     assert.isFalse(await store.load(), "load should fail for a missing file");
     assert.equal(
@@ -395,7 +447,10 @@ describe("paper status plugin", function () {
     await IOUtils.remove(badPath, { ignoreAbsent: true });
 
     Zotero.Prefs.set(PREF_JSON_PATH, prefPath, true);
-    assert.isTrue(await store.load(), "load recovers once the good path is back");
+    assert.isTrue(
+      await store.load(),
+      "load recovers once the good path is back",
+    );
     assert.equal(
       await readRaw(),
       beforeRaw,
@@ -416,5 +471,10 @@ describe("paper status plugin", function () {
     const parsed = splitCellData(cellDataFor(titleItem, "reading"));
     assert.isOk(parsed, "rows are mapped again after restart");
     assert.equal(parsed!.paperId, paper.id);
+  });
+
+  after(async function () {
+    Zotero.Prefs.set(PREF_JSON_PATH, prefPath, true);
+    await IOUtils.remove(jsonDir, { recursive: true, ignoreAbsent: true });
   });
 });
